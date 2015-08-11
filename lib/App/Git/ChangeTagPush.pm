@@ -336,15 +336,15 @@ sub _push_changes {
     $config{gitrepo}->run('push', '--follow-tags') if( $self->_prompt("Push $version and the $branch_name branch to origin?") );
 }
 
-=head1 AUTHOR
+=head1 AUTHORS
 
 Tim Bunce, C<< <tim.bunce at pobox.com> >>
+JD Lewis, C<< <jdavidlewis at jdlmx.com> >>
 
 =head1 BUGS
 
-Please report any bugs or feature requests to C<bug-app-git-changetagpush at rt.cpan.org>, or through
-the web interface at L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=App-Git-ChangeTagPush>.  I will be notified, and then you'll
-automatically be notified of progress on your bug as I make changes.
+Please report any bugs or feature requests through the web interface at L<https://github.com/lohengrin332/App-Git-ChangeTagPush/issues>.
+We will be notified, and then you'll automatically be notified of progress on your bug as we make changes.
 
 
 
