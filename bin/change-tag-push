@@ -1,0 +1,65 @@
+#!/usr/bin/env perl
+
+=head1 NAME
+
+change-tag-push - Utility to update Changes, edit, tag with version and push
+
+=head1 SYNOPSIS
+
+    change-tag-push v1.42.7   - use the specified version
+
+Typical usage:
+
+    change-tag-push major     - use the next patch version vN+1.0.0
+    change-tag-push minor     - use the next patch version vN.N+1.0
+    change-tag-push patch     - use the next patch version vN.N.N+1
+
+Special case usage:
+
+    change-tag-push trial     - use the next patch version vN.N.N.N+1
+    change-tag-push current   - add changes to the latest version section
+
+Command Line Options:
+
+    --changes-filename=s      - Specify a filename to use instead of the default "Changes"
+    --preamble=s              - Specify a preamble for your Changes file instead of the default
+                                "Release history for <repo_directory_name>"
+
+=head1 DESCRIPTION
+
+This is a handy utility that will:
+
+* Pick the next appropriate version number
+
+* Get details of commits since the last time the Changes file was committed
+
+* Rewrite the Changes file to include the version, the data, and the commit details
+
+* Open an editor for you to rewrite the raw commit messages for human readability
+
+* Commit the Changes file
+
+* Create an annotated tag for the current HEAD, i.e. the Changes commit
+
+* Push the tag
+
+There are many sanity checks performed along the way. If any insanity creeps through
+do let me know.
+
+=head2 NOTES
+
+The entire Changes file gets rewritten, including standardizing the indent and
+wrapping the text, so don't be surprised if the first use of this utility
+causes a very large diff.
+
+=cut
+
+use strict;
+use warnings;
+
+use lib('/home/dlewis/code/App-Git-ChangeTagPush/lib');
+use App::Git::ChangeTagPush;
+
+App::Git::ChangeTagPush->run_from_cl;
+
+exit 0;
