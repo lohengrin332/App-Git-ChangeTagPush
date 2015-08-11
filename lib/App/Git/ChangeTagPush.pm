@@ -107,11 +107,15 @@ sub _process_command_line {
     my $self = shift;
 
     my %config;
+    my $help;
 
     GetOptions(
         'changes-filename=s' => \$config{changes_filename},
         'preamble=s' => \$config{preamble},
+        'help'       => \$help,
     ) || pod2usage(2);
+
+    pod2usage(2) if($help);
 
     $config{version_param} = shift @ARGV
         or pod2usage( -message => "", -exitval => 2 );

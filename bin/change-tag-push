@@ -21,6 +21,7 @@ Special case usage:
 
 Command Line Options:
 
+    --help                    - Print this help message and exit
     --changes-filename=s      - Specify a filename to use instead of the default "Changes"
     --preamble=s              - Specify a preamble for your Changes file instead of the default
                                 "Release history for <repo_directory_name>"
