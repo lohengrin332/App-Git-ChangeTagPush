@@ -20,7 +20,7 @@ use version;
 
 =head1 NAME
 
-App::Git::ChangeTagPush
+App::Git::ChangeTagPush - Simplify maintenance of your Changes file and git version tags
 
 =head1 VERSION
 
@@ -333,7 +333,7 @@ sub _push_changes {
     my %config = @_;
 
     my $branch_name = $config{gitrepo}->run('rev-parse', '--abbrev-ref', 'HEAD');
-    $config{gitrepo}->run('push', '--follow-tags') if( $self->_prompt("Push $version and the $branch_name branch to origin?") );
+    $config{gitrepo}->run('push', '--follow-tags') if( $self->_prompt("Push $version tag and the $branch_name branch upstream?") );
 }
 
 =head1 AUTHORS

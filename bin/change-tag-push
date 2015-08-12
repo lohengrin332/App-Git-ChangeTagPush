@@ -58,7 +58,6 @@ causes a very large diff.
 use strict;
 use warnings;
 
-use lib('/home/dlewis/code/App-Git-ChangeTagPush/lib');
 use App::Git::ChangeTagPush;
 
 App::Git::ChangeTagPush->run_from_cl;
