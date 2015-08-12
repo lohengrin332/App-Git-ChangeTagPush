@@ -10,6 +10,7 @@ use File::Basename;
 use POSIX qw(strftime);
 use Try::Tiny;
 use Text::Wrap;
+use Scalar::Util qw(blessed);
 
 use CPAN::Changes 0.400001;
 use Git::Repository 'Log';
@@ -44,6 +45,10 @@ has gitrepo => (
     },
 );
 
+has preamble => (
+    is => 'rw',
+);
+
 has changes_wrap_columns => (
     is => 'rw',
     default => 132,
@@ -54,6 +59,14 @@ sub write_changes_file {
     my $self = shift;
 
     local($Text::Wrap::columns) = $self->changes_wrap_columns; ## no critic (ProhibitPackageVars) - the default of 76 is way too low
+
+    # we preserve the existing preamble if there is one
+    # otherwise we apply ours or else a simple default
+    if (not $self->changes->preamble) {
+        my $preamble = $self->preamble
+            || sprintf "Release history for %s\n\n", basename(dirname($self->changes_file));
+        $self->changes->preamble($preamble);
+    }
 
     open my $fh, ">", $self->changes_file;
     print $fh $self->changes->serialize;
@@ -157,21 +170,23 @@ sub get_release_entry_for_version {
 
 
 sub add_changes {
-    my ($self, $version_spec, $log_formatter, $since) = @_;
+    my ($self, $version_spec, $log_formatter, $since, $set_date) = @_;
 
     my $new_version = $self->get_next_version($version_spec);
 
-    my $release = $self->get_release_entry_for_version($new_version);
+    my $release = $self->get_release_entry_for_version($new_version, $set_date // 1);
 
     my @changelogs = $self->get_recent_git_change_log($since);
 
-    $log_formatter ||= sub { return sprintf "%s - %s", $_->subject, $_->commit };
+    $log_formatter ||= sub { return sprintf "%s - %.7s", $_->subject, $_->commit };
 
     $release->add_changes( map { $log_formatter->($_) } @changelogs );
 
     $self->changes->add_release($release);
 
-    $self->write_changes_file;
+    # we don't write_changes_file here so caller can run extra checks
+    # such as checking there's no tag called $new_version already,
+    # before they call write_changes_file
 
     return $new_version;
 }

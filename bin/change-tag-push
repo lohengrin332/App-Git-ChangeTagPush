@@ -16,15 +16,7 @@ Typical usage:
 
 Special case usage:
 
-    change-tag-push trial     - use the next patch version vN.N.N.N+1
     change-tag-push current   - add changes to the latest version section
-
-Command Line Options:
-
-    --help                    - Print this help message and exit
-    --changes-filename=s      - Specify a filename to use instead of the default "Changes"
-    --preamble=s              - Specify a preamble for your Changes file instead of the default
-                                "Release history for <repo_directory_name>"
 
 =head1 DESCRIPTION
 
@@ -51,15 +43,46 @@ do let me know.
 
 The entire Changes file gets rewritten, including standardizing the indent and
 wrapping the text, so don't be surprised if the first use of this utility
-causes a very large diff.
+causes a large diff.
 
 =cut
 
 use strict;
 use warnings;
 
-use App::Git::ChangeTagPush;
+use CPAN::Changes::FromGit;
+use IO::Prompt;
 
-App::Git::ChangeTagPush->run_from_cl;
+my $cfg = CPAN::Changes::FromGit->new();
+
+my $version_param = shift
+    or die "No version specified (e.g., vN.N.N, major, minor, patch, or current)\n";
+
+# XXX add an --allow-dirty option to bypass this check
+die "Current repo contains uncommitted changes\n"
+    if $cfg->gitrepo->run("status", "--porcelain", "--untracked-files=no");
+
+my $new_version = $cfg->add_changes($version_param);
+
+die "Tag $new_version already exists in repo! You must use a newer version.\n"
+    if $cfg->gitrepo->run("show-ref", $new_version);
+
+$cfg->write_changes_file;
+
+system($ENV{EDITOR} || "vi", $cfg->changes_file);
+
+system("git", "diff", "--ignore-all-space", $cfg->changes_file);
+
+# sanity check that the version we're about to tag still exists in Changes
+# (in case it was accidentally deleted)
+CPAN::Changes::FromGit->new(changes_file => $cfg->changes_file)
+    ->changes->release($new_version)
+    or die "Error: changes file no longer contains an entry for $new_version!\n";
+
+prompt("Press return to commit changes and tag current tree as $new_version: ");
+$cfg->commit_changes_and_tag_with_version($new_version);
+
+prompt("Press return to push $new_version upstream: ");
+$cfg->gitrepo->run("push", "--follow-tags");
 
 exit 0;
