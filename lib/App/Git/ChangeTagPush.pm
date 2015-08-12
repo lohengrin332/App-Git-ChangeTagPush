@@ -144,7 +144,7 @@ sub _setup_config {
     return (
         preamble         => 'Release history for ' . basename(getcwd),
         date             => strftime('%Y-%m-%d', gmtime(time)),
-        usage_hint       => 'vN.N.N, vN.N.N.N, or major, minor, patch, trial, or current',
+        usage_hint       => 'vN.N.N, major, minor, patch, or current',
         # default to passed-in values
         %config,
     );
@@ -190,15 +190,14 @@ sub _determine_version {
     }
     catch {
         my $err = $_;
-        my ($vp1, $vp2, $vp3, $vp4)  = split /\./, $latest_version;
-        if    ($version_spec eq 'major') { ++$vp1; $vp2=0; $vp3=0; $vp4=0; }
-        elsif ($version_spec eq 'minor') {         ++$vp2; $vp3=0; $vp4=0; }
-        elsif ($version_spec eq 'patch') {                 ++$vp3; $vp4=0; }
-        elsif ($version_spec eq 'trial') {                         ++$vp4; }
+        my ($vp1, $vp2, $vp3)  = split /\./, $latest_version;
+        if    ($version_spec eq 'major') { ++$vp1; $vp2=0; $vp3=0; }
+        elsif ($version_spec eq 'minor') {         ++$vp2; $vp3=0; }
+        elsif ($version_spec eq 'patch') {                 ++$vp3; }
         elsif ($version_spec eq 'current')  { }
         else { die "$version_spec is not a valid version (e.g. $config{usage_hint}): $err\n"; }
 
-        my $v = version->parse( join(".", ($vp4) ? ($vp1, $vp2, $vp3, $vp4) : ($vp1, $vp2, $vp3)) );
+        my $v = version->parse( join(".", $vp1, $vp2, $vp3) );
         warn "Bumping version from $latest_version to $v\n"
             unless $v eq $latest_version;
         $v;
