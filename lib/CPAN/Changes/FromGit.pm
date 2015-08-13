@@ -5,7 +5,6 @@ use Moo;
 use version;
 use autodie;
 use Carp;
-use Cwd;
 use File::Basename;
 use POSIX qw(strftime);
 use Try::Tiny;
@@ -20,8 +19,10 @@ our $VERSION = '1.01';
 
 has changes_file => (
     is => 'ro',
+    lazy => 1,
     default => sub {
-        return getcwd()."/Changes";
+        my $work_tree = shift->gitrepo->work_tree;
+        return "$work_tree/Changes"; # XXX add changes_file_basename?
     },
 );
 
@@ -33,7 +34,7 @@ has changes => (
         my $changes_file = $self->changes_file;
         # create empty file to bootstrap if need be
         open my $fh, ">", $changes_file unless -f $changes_file;
-        return CPAN::Changes->load( $changes_file )
+        return CPAN::Changes->load( $changes_file, next_token => $self->next_token_qr )
     },
 );
 
@@ -41,12 +42,18 @@ has gitrepo => (
     is => 'lazy',
     default => sub {
         my $self = shift;
-        return Git::Repository->new( work_tree => dirname($self->changes_file) );
+        return Git::Repository->new(); # finds work_tree from current dir
     },
 );
 
 has preamble => (
     is => 'rw',
+);
+
+# see https://metacpan.org/pod/CPAN::Changes#DEALING-WITH-NEXT-VERSION-PLACEHOLDERS
+has next_token_string => (
+    is => 'rw',
+    default => '{{$NEXT}}',
 );
 
 has changes_wrap_columns => (
@@ -81,27 +88,37 @@ sub get_recent_git_change_log {
 
     # $since can be ref known to git or a Git::Repository::Log object
     # defaults to the last change to the Changes file
-    $since ||= (Git::Repository->log('-n1', $self->changes_file))[0];
+    $since ||= ($self->gitrepo->log('-n1', $self->changes_file))[0];
     $since = $since->commit if $since && blessed($since) && $since->can('commit');
 
     my @changes_log = ($since) ? $self->gitrepo->log($since . '..') : ();
-    return @changes_log;
+    return @changes_log; # returns count in scalar context
 }
 
 
 sub get_latest_version_in_changes {
     my $self = shift;
 
-    my $latest_release = ($self->changes->releases)[-1]; # undef if none
-    my $latest_version = version->parse( ($latest_release) ? $latest_release->version : "v0.0.0" );
-    return $latest_version;
+    # get latest release version that isn't next_token_string
+    my $latest_release;
+    for my $idx (-1, -2) {
+        $latest_release = ($self->changes->releases)[$idx]
+            or return undef;
+        last if $latest_release->version eq $self->next_token_string;
+    }
+    my $version = $latest_release->version; # might be next_token_string
+    return eval { version->parse( $version ) } || $version;
 }
 
 
 sub get_next_version {
     my ($self, $version_spec) = @_;
 
-    my $latest_version = $self->get_latest_version_in_changes;
+    return $self->next_token_string
+        if $version_spec eq 'next';
+
+    my $latest_version = $self->get_latest_version_in_changes
+        || version->parse('v0.0.0');
 
     my $new_version = increment_version($latest_version, $version_spec);
 
@@ -144,10 +161,17 @@ sub get_release_entry_for_version {
     my $version = shift;
     my $set_date = shift; # false, a new date string, a strftime template or "1" to use '%Y-%m-%d'
 
+    if ("$version" eq $self->next_token_string) {
+        my $latest = ($self->changes->releases)[-1];
+        return $latest if $latest && $latest->version eq $self->next_token_string;
+        return CPAN::Changes::Release->new( version => $self->next_token_string );
+    }
+
     my $latest_version = $self->get_latest_version_in_changes;
 
-    my $release;
-    unless ($release = $self->changes->release($version) ) {
+    my $release = $self->changes->release($version);
+
+    unless ($release) {
         if ( $version > $latest_version) {
             $release = CPAN::Changes::Release->new( version => $version );
         }
@@ -197,14 +221,27 @@ sub commit_changes_and_tag_with_version {
 
     # typically called soon after add_changes
 
-    $version ||= $self->get_latest_version_in_changes;
+    $version ||= $self->get_latest_version_in_changes
+        || croak "No version in ".$self->changes_file;
 
-    my $message = sprintf "Updated %s for %s", basename($self->changes_file), $version;
+    my $is_next_token = ("$version" eq $self->next_token_string);
+
+    my $message = sprintf "Updated %s for %s",
+        basename($self->changes_file),
+        ($is_next_token) ? 'next version' : $version;
+
     $self->gitrepo->run("commit", "--message=$message", $self->changes_file);
 
-    $self->gitrepo->run("tag", "-a", "--message=", $version);
+    $self->gitrepo->run("tag", "-a", "--message=", $version)
+        unless $is_next_token;
 
     return 1;
+}
+
+
+sub next_token_qr {
+    my $next_token_string = shift->next_token_string;
+    return qr/\Q$next_token_string\E/x;
 }
 
 

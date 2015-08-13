@@ -17,6 +17,7 @@ Typical usage:
 Special case usage:
 
     change-tag-push current   - add changes to the latest version section
+    change-tag-push next      - add changes to the {{$NEXT}} version section
 
 =head1 DESCRIPTION
 
@@ -52,15 +53,20 @@ use warnings;
 
 use CPAN::Changes::FromGit;
 use IO::Prompt;
+use Getopt::Long;
+
+GetOptions(
+    'dirty!' => \my $opt_dirty,
+) or exit 1;
 
 my $cfg = CPAN::Changes::FromGit->new();
 
 my $version_param = shift
-    or die "No version specified (e.g., vN.N.N, major, minor, patch, or current)\n";
+    or die "No version specified (e.g., vN.N.N, major, minor, patch, current or next)\n";
 
-# XXX add an --allow-dirty option to bypass this check
 die "Current repo contains uncommitted changes\n"
-    if $cfg->gitrepo->run("status", "--porcelain", "--untracked-files=no");
+    if !$opt_dirty
+    && $cfg->gitrepo->run("status", "--porcelain", "--untracked-files=no");
 
 my $new_version = $cfg->add_changes($version_param);
 
@@ -76,13 +82,13 @@ system("git", "diff", "--ignore-all-space", $cfg->changes_file);
 # sanity check that the version we're about to tag still exists in Changes
 # (in case it was accidentally deleted)
 CPAN::Changes::FromGit->new(changes_file => $cfg->changes_file)
-    ->changes->release($new_version)
+    ->get_latest_version_in_changes eq $new_version
     or die "Error: changes file no longer contains an entry for $new_version!\n";
 
-prompt("Press return to commit changes and tag current tree as $new_version: ");
+prompt(-yes_no, "Commit changes: ") or die "Aborted\n";
 $cfg->commit_changes_and_tag_with_version($new_version);
 
-prompt("Press return to push $new_version upstream: ");
+prompt(-yes_no, "Push upstream: ") or die "Aborted\n";
 $cfg->gitrepo->run("push", "--follow-tags");
 
 exit 0;
