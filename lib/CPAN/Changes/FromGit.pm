@@ -61,6 +61,11 @@ has changes_wrap_columns => (
     default => 132,
 );
 
+has changenotes_prolog => (
+    is => 'rw', # the NOCOMMIT is for App::GitHooks::Plugin::BlockNOCOMMIT
+    default => "### SUMMARIZE THESE RAW COMMITS INTO A DESCRIPTION OF THE FUNCTIONAL CHANGE ### NO COMMIT",
+);
+
 
 sub write_changes_file {
     my $self = shift;
@@ -96,7 +101,7 @@ sub get_recent_git_change_log {
 }
 
 
-sub get_latest_version_in_changes {
+sub get_latest_version_in_changes { # won't return next_token
     my $self = shift;
 
     # get latest release version that isn't next_token_string
@@ -104,7 +109,7 @@ sub get_latest_version_in_changes {
     for my $idx (-1, -2) {
         $latest_release = ($self->changes->releases)[$idx]
             or return undef;
-        last if $latest_release->version eq $self->next_token_string;
+        last if $latest_release->version ne $self->next_token_string;
     }
     my $version = $latest_release->version; # might be next_token_string
     return eval { version->parse( $version ) } || $version;
@@ -156,28 +161,47 @@ sub increment_version { # support function, not a method
 }
 
 
+sub remove_next_token_release {
+    my $self = shift;
+
+    my @releases = $self->changes->releases;
+
+    my $next_token_release;
+    if (@releases && $releases[-1]->version eq $self->next_token_string) {
+        $next_token_release = pop @releases;
+        $self->changes->releases(@releases);
+    }
+
+    return $next_token_release;
+}
+
+
 sub get_release_entry_for_version {
     my $self = shift;
     my $version = shift;
     my $set_date = shift; # false, a new date string, a strftime template or "1" to use '%Y-%m-%d'
 
+    my $latest_version = $self->get_latest_version_in_changes; # non-next_token
+
+    my $next_token_release = $self->remove_next_token_release; # {{$NEXT}} if there is one
+
     if ("$version" eq $self->next_token_string) {
-        my $latest = ($self->changes->releases)[-1];
-        return $latest if $latest && $latest->version eq $self->next_token_string;
+        return $next_token_release if $next_token_release;
         return CPAN::Changes::Release->new( version => $self->next_token_string );
     }
 
-    my $latest_version = $self->get_latest_version_in_changes;
-
     my $release = $self->changes->release($version);
-
     unless ($release) {
-        if ( $version > $latest_version) {
-            $release = CPAN::Changes::Release->new( version => $version );
+        croak sprintf "No %s release in %s (latest is %s)",
+                $version, $self->changes_file, $latest_version
+            if $version <= $latest_version;
+
+        if ($next_token_release) { # use the next_token_release if we have one
+            $release = $next_token_release;
+            $release->version($version); # convert to a specific version
         }
-        else {
-            croak sprintf "No %s release in %s (latest is %s)",
-                $version, $self->changes_file, $latest_version;
+        else {                     # otherwise create a new release
+            $release = CPAN::Changes::Release->new( version => $version );
         }
     }
 
@@ -204,7 +228,9 @@ sub add_changes {
 
     $log_formatter ||= sub { return sprintf "%s - %.7s", $_->subject, $_->commit };
 
-    $release->add_changes( map { $log_formatter->($_) } @changelogs );
+    my @changenotes = map { $log_formatter->($_) } @changelogs;
+    unshift @changenotes, $self->changenotes_prolog if $self->changenotes_prolog;
+    $release->add_changes( @changenotes );
 
     $self->changes->add_release($release);
 
