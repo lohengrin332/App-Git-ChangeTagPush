@@ -75,15 +75,17 @@ die "Tag $new_version already exists in repo! You must use a newer version.\n"
 
 $cfg->write_changes_file;
 
-system($ENV{EDITOR} || "vi", $cfg->changes_file);
+$ENV{EDITOR} ||= "vi";
+system("$ENV{EDITOR} ". $cfg->changes_file);
 
 system("git", "diff", "--ignore-all-space", $cfg->changes_file);
 
 # sanity check that the version we're about to tag still exists in Changes
 # (in case it was accidentally deleted)
 CPAN::Changes::FromGit->new(changes_file => $cfg->changes_file)
-    ->get_latest_version_in_changes eq $new_version
-    or die "Error: changes file no longer contains an entry for $new_version!\n";
+    ->get_latest_version_in_changes eq "$new_version"
+    or die "Error: changes file no longer contains an entry for $new_version!\n"
+    if $version_param ne 'next';
 
 prompt(-yes_no, "Commit changes: ") or die "Aborted\n";
 $cfg->commit_changes_and_tag_with_version($new_version);
