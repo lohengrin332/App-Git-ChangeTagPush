@@ -63,7 +63,7 @@ has changes_wrap_columns => (
 
 has changenotes_prolog => (
     is => 'rw', # the NOCOMMIT is for App::GitHooks::Plugin::BlockNOCOMMIT
-    default => "### SUMMARIZE THESE RAW COMMITS INTO A DESCRIPTION OF THE FUNCTIONAL CHANGE ### NO COMMIT",
+    default => "### SUMMARIZE THESE RAW COMMITS INTO DESCRIPTIONS OF THE FUNCTIONAL CHANGES ### NO COMMIT",
 );
 
 
@@ -224,6 +224,12 @@ sub add_changes {
 
     my $release = $self->get_release_entry_for_version($new_version, $set_date // 1);
 
+    # provide a group heading for each distinct group name already in this file
+    # this is generally helpful for consistency and is self-learning
+    for my $group_name ( $self->group_names_to_use ) {
+        $release->add_group($group_name) unless $release->get_group($group_name);
+    }
+
     my @changelogs = $self->get_recent_git_change_log($since);
 
     $log_formatter ||= sub { return sprintf "%s - %.7s", $_->subject, $_->commit };
@@ -268,6 +274,13 @@ sub commit_changes_and_tag_with_version {
 sub next_token_qr {
     my $next_token_string = shift->next_token_string;
     return qr/\Q$next_token_string\E/x;
+}
+
+
+sub group_names_to_use {
+    my $self = shift;
+    my %group_names = map { ($_) ? ($_ => 1) : () } map { $_->groups } $self->changes->releases;
+    return sort keys %group_names;
 }
 
 
